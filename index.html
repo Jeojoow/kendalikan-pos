@@ -1,0 +1,1716 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kendalikan — Kasir Scan Barcode & Dasbor SIM Owner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Library Scanner Barcode & QR Lokal Kontinu (Ala AsistenToko) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #F8FAFC; }
+    .tap-btn:active { transform: scale(0.97); }
+    #reader-barcode video { border-radius: 0.75rem; object-fit: cover; }
+  </style>
+</head>
+<body class="text-slate-800">
+
+  <!-- ========================================================================
+       ZONA 1: HALAMAN KASIR TERBUKA (SCAN BARCODE ALA ASISTENTOKO)
+       ======================================================================== -->
+  <div id="zone-kasir" class="min-h-screen pb-12">
+    <header class="sticky top-0 z-30 bg-slate-900 text-white px-4 py-3.5 shadow-md flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="bg-emerald-500 p-2 rounded-xl text-slate-950">
+          <i data-lucide="scan-barcode" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-base tracking-tight leading-none">KENDALIKAN POS</h1>
+          <p class="text-[11px] text-slate-400 mt-0.5" id="label-shift-kasir">Memuat shift...</p>
+        </div>
+      </div>
+
+      <button type="button" onclick="bukaModalPinOwner()" class="tap-btn px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow">
+        <span>Mode Owner</span>
+        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+      </button>
+    </header>
+
+    <main class="max-w-lg mx-auto px-4 pt-4 space-y-4">
+
+      <!-- 1. PANEL MODE SCAN BARCODE KONTINU (ALA ASISTENTOKO) -->
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="flex items-center gap-1.5">
+              <h2 class="text-xs font-bold uppercase tracking-wider text-slate-700">Mode Scan Barcode</h2>
+              <span id="badge-scanner-status" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">Standby</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-0.5">Lewatkan barcode kemasan → bunyi beep → masuk keranjang</p>
+          </div>
+          <button type="button" onclick="bukaModalDaftarProduk('')" class="tap-btn px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold flex items-center gap-1">
+            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Produk Baru
+          </button>
+        </div>
+
+        <!-- Tombol Aktivasi Kamera Kontinu & Scan Foto -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button type="button" id="btn-toggle-barcode" onclick="toggleLiveBarcodeScanner()" class="tap-btn bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm">
+            <i data-lucide="scan-line" class="w-5 h-5 mb-1"></i>
+            <span id="lbl-toggle-barcode" class="text-xs font-bold">Mulai Scan Live</span>
+            <span class="text-[10px] text-emerald-100">Auto-Beep Kontinu</span>
+          </button>
+
+          <label for="input-scan-foto-barcode" class="tap-btn cursor-pointer bg-slate-800 hover:bg-slate-900 text-white rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm">
+            <i data-lucide="camera" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs font-bold">Foto Barcode</span>
+            <span class="text-[10px] text-slate-300">Alternatif Kamera HP</span>
+          </label>
+          <input type="file" id="input-scan-foto-barcode" accept="image/*" capture="environment" onchange="scanBarcodeDariFoto(event)" class="hidden">
+        </div>
+
+        <!-- Kotak Live Viewfinder Barcode -->
+        <div id="wrap-reader-barcode" class="hidden bg-slate-950 rounded-2xl overflow-hidden border-2 border-emerald-500 p-2 space-y-2">
+          <div id="reader-barcode" class="w-full overflow-hidden rounded-xl"></div>
+          <div class="flex items-center justify-between px-2 py-1 text-[11px] text-emerald-300">
+            <span id="txt-last-scanned">Arahkan barcode kemasan ke dalam kotak...</span>
+            <button type="button" onclick="toggleLiveBarcodeScanner()" class="text-rose-400 font-bold hover:underline">Matikan</button>
+          </div>
+        </div>
+        <div id="reader-file-hidden" class="hidden"></div>
+
+        <!-- Input Manual Kode / USB Barcode Scanner -->
+        <div class="pt-2 border-t border-slate-100">
+          <div class="flex gap-2">
+            <input type="text" id="input-kode-manual" onkeydown="if(event.key==='Enter'){event.preventDefault();tambahViaKodeManual();}" placeholder="Scan alat / ketik barcode (misal: 8992761139018)..." class="flex-1 h-11 px-3.5 rounded-xl border border-slate-300 text-xs uppercase font-mono">
+            <button type="button" onclick="tambahViaKodeManual()" class="tap-btn px-4 h-11 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold">
+              Tambah
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. PILIH ITEM CEPAT (1-TAP) -->
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Pilih Item Cepat (1-Tap)</label>
+          <button type="button" onclick="resetKeranjangKasir()" class="text-xs font-semibold text-rose-600 hover:underline">Kosongkan Keranjang</button>
+        </div>
+        <div id="grid-quick-tap" class="grid grid-cols-2 gap-2"></div>
+      </section>
+
+      <!-- 3. KERANJANG BELANJA TERSTRUKTUR & KALKULATOR KEMBALIAN -->
+      <form id="form-checkout-kasir" onsubmit="simpanTransaksi(event)" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Keranjang Belanja</label>
+            <span id="badge-total-qty-cart" class="text-xs font-bold text-indigo-600">0 Item</span>
+          </div>
+
+          <div id="list-keranjang-kasir" class="divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-50/60 px-3">
+            <p class="text-xs text-slate-400 py-5 text-center">Keranjang kosong. Scan barcode atau tap produk di atas.</p>
+          </div>
+        </div>
+
+        <!-- Cek Kode Promo Produk -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Kode Promo Produk (Opsional)</label>
+          <div class="flex gap-2">
+            <input type="text" id="input-kode-promo" placeholder="Contoh: PROMO15-101108" class="flex-1 h-11 px-3.5 rounded-xl border border-slate-300 text-sm uppercase font-mono">
+            <button type="button" onclick="cekPromoKasir()" class="tap-btn px-4 h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">
+              Cek Promo
+            </button>
+          </div>
+          <p id="msg-status-promo" class="text-xs mt-1.5 hidden font-semibold"></p>
+        </div>
+
+        <!-- Total Tagihan & Kalkulator Kembalian Tunai -->
+        <div class="p-3.5 rounded-2xl bg-slate-900 text-white space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-semibold">TOTAL TAGIHAN</span>
+            <span id="display-total-tagihan" class="text-2xl font-black text-emerald-400">Rp0</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-800">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Uang Diterima (Rp)</label>
+              <input type="number" id="input-uang-diterima" inputmode="numeric" oninput="hitungKembalianKasir()" placeholder="0" class="w-full h-10 px-3 rounded-xl bg-slate-800 border border-slate-700 text-white font-bold text-sm focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Kembalian Tunai</label>
+              <div id="display-kembalian" class="h-10 px-3 rounded-xl bg-slate-800/60 border border-slate-800 flex items-center font-extrabold text-sm text-slate-300">
+                Rp0
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="tap-btn w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
+          <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+          <span>SIMPAN TRANSAKSI & POTONG STOK</span>
+        </button>
+      </form>
+
+      <!-- 4. RIWAYAT SHIFT HARI INI SAJA -->
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 class="text-sm font-bold text-slate-800">Riwayat Struk Shift Hari Ini</h2>
+            <p class="text-[11px] text-slate-500">Hanya transaksi tanggal berjalan</p>
+          </div>
+          <span id="badge-trx-hari-ini" class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">0 Struk</span>
+        </div>
+        <div id="list-riwayat-shift" class="divide-y divide-slate-100"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ========================================================================
+       MODAL PENDAFTARAN PRODUK BARU + BARCODE + FOTO KE GOOGLE DRIVE
+       ======================================================================== -->
+  <div id="modal-daftar-produk" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="font-extrabold text-base text-slate-900">Daftarkan Produk & Barcode</h3>
+          <p id="sub-modal-daftar" class="text-[11px] text-slate-500">Tersimpan ke Master_Produk & Google Drive</p>
+        </div>
+        <button type="button" onclick="tutupModalDaftarProduk()" class="text-slate-400 hover:text-slate-700 font-bold text-lg">✕</button>
+      </div>
+
+      <form onsubmit="simpanProdukBaru(event)" class="space-y-3">
+        <div class="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-3 text-center space-y-2">
+          <img id="preview-foto-baru" class="hidden w-24 h-24 object-cover rounded-xl mx-auto border border-slate-200">
+          <div class="flex flex-wrap justify-center gap-2">
+            <label for="input-foto-produk-baru" class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold">
+              <i data-lucide="camera" class="w-3.5 h-3.5"></i> Foto Kemasan Produk
+            </label>
+            <button type="button" id="btn-autofill-ai" onclick="autoFillDariFotoBaru()" class="hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold shadow">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Baca Nama Otomatis
+            </button>
+          </div>
+          <input type="file" id="input-foto-produk-baru" accept="image/*" capture="environment" onchange="prosesFotoProdukBaru(event)" class="hidden">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Kode Barcode / SKU</label>
+            <input type="text" id="reg-kode-produk" required placeholder="899..." class="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs font-mono uppercase bg-amber-50/50">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Kategori</label>
+            <input type="text" id="reg-kategori-produk" required placeholder="Minuman / Snack" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">Nama Produk Lengkap</label>
+          <input type="text" id="reg-nama-produk" required placeholder="Contoh: Teh Botol Sosro 350ml" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Harga Jual (Rp)</label>
+            <input type="number" id="reg-harga-produk" required min="100" placeholder="5000" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-bold">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Stok Awal (Unit)</label>
+            <input type="number" id="reg-stok-produk" required min="0" value="24" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-bold">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">Catatan Kemasan (Opsional)</label>
+          <input type="text" id="reg-catatan-produk" placeholder="Contoh: 1 dus isi 24 botol" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs">
+        </div>
+
+        <label class="flex items-center gap-2 text-xs font-medium text-slate-700 pt-1">
+          <input type="checkbox" id="reg-quick-tap" checked class="rounded text-emerald-600">
+          Tampilkan di tombol Pilih Item Cepat (1-Tap) Kasir
+        </label>
+
+        <button type="submit" class="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow">
+          Simpan Produk ke Database
+        </button>
+      </form>
+      <canvas id="canvas-kompresi" class="hidden"></canvas>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MODAL PIN OWNER
+       ======================================================================== -->
+  <div id="modal-pin-owner" class="hidden fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-7 shadow-2xl text-center">
+      <div class="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+        <i data-lucide="shield-check" class="w-7 h-7"></i>
+      </div>
+      <h2 class="text-xl font-extrabold text-slate-900">Zona Terkunci Owner</h2>
+      <p class="text-xs text-slate-500 mt-1">Auto-lock aktif otomatis setelah 5 menit tanpa aktivitas.</p>
+
+      <form onsubmit="verifikasiPinMasukOwner(event)" class="mt-5 space-y-3.5">
+        <input type="password" id="input-pin-owner" inputmode="numeric" maxlength="10" required placeholder="••••••" class="w-full h-12 text-center text-2xl tracking-[0.4em] font-bold rounded-xl border-2 border-slate-300 focus:border-indigo-600 focus:outline-none">
+        <p id="err-pin-owner" class="hidden text-xs font-semibold text-rose-600">PIN Owner salah! (Default: 123456)</p>
+        <button type="submit" class="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">
+          Buka Dasbor Kendalikan
+        </button>
+        <button type="button" onclick="tutupModalPinOwner()" class="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-800">
+          Batal & Kembali ke Kasir
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       ZONA 2: HALAMAN OWNER TERKUNCI (5 SUB-MENU + AUTO-LOCK 5 MENIT)
+       ======================================================================== -->
+  <div id="zone-owner" class="hidden min-h-screen flex flex-col lg:flex-row">
+
+    <!-- Desktop Sidebar -->
+    <aside class="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 bg-slate-900 text-white z-30">
+      <div class="p-6 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-lg">K</div>
+          <div>
+            <h1 class="font-extrabold text-base tracking-tight">KENDALIKAN</h1>
+            <p class="text-[11px] text-emerald-400" id="lbl-autolock-desk">Auto-Lock: 05:00</p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="flex-1 p-4 space-y-1.5">
+        <button onclick="switchOwnerTab('dashboard')" id="desk-tab-dashboard" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 text-white">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard & DIKW
+        </button>
+        <button onclick="switchOwnerTab('transaksi')" id="desk-tab-transaksi" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800">
+          <i data-lucide="receipt-text" class="w-4 h-4"></i> Riwayat Transaksi
+        </button>
+        <button onclick="switchOwnerTab('ai')" id="desk-tab-ai" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800">
+          <span class="flex items-center gap-3"><i data-lucide="sparkles" class="w-4 h-4"></i> AI Agent Strategi</span>
+          <span id="badge-ai-desk" class="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-500 text-white">0</span>
+        </button>
+        <button onclick="switchOwnerTab('katalog')" id="desk-tab-katalog" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800">
+          <i data-lucide="package" class="w-4 h-4"></i> Katalog & Stok
+        </button>
+        <button onclick="switchOwnerTab('guardrails')" id="desk-tab-guardrails" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800">
+          <i data-lucide="sliders-horizontal" class="w-4 h-4"></i> Guardrails & POAC
+        </button>
+      </nav>
+
+      <div class="p-4 border-t border-slate-800">
+        <button onclick="kunciDanKembaliKeKasir('Sesi Owner dikunci 🔒')" class="w-full py-2.5 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center justify-center gap-2">
+          <i data-lucide="lock" class="w-3.5 h-3.5"></i> Kunci & Kembali ke Kasir
+        </button>
+      </div>
+    </aside>
+
+    <!-- Mobile Top Bar Owner -->
+    <header class="flex lg:hidden sticky top-0 z-30 bg-slate-900 text-white px-4 py-3 items-center justify-between shadow">
+      <div>
+        <span class="font-bold text-sm block">KENDALIKAN OWNER</span>
+        <span class="text-[10px] text-emerald-400" id="lbl-autolock-mob">Auto-Lock: 05:00</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button onclick="muatDataOwner()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-xs font-semibold">Sync</button>
+        <button onclick="kunciDanKembaliKeKasir('Sesi Owner dikunci 🔒')" class="px-2.5 py-1.5 rounded-lg bg-rose-600 text-xs font-bold">Kunci 🔒</button>
+      </div>
+    </header>
+
+    <!-- Konten Utama Owner -->
+    <main class="flex-1 lg:pl-64 pb-24 lg:pb-10">
+      <div class="hidden lg:flex bg-white border-b border-slate-200 px-8 py-4 items-center justify-between">
+        <div>
+          <h2 id="owner-header-title" class="text-lg font-extrabold text-slate-900">Dashboard & Evaluasi Bulanan (DIKW)</h2>
+          <p class="text-xs text-slate-500">Perhitungan Akurat Per Produk, Monitoring Stok & Strategi AI</p>
+        </div>
+        <button onclick="muatDataOwner()" class="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center gap-2">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sinkronkan Data
+        </button>
+      </div>
+
+      <div class="max-w-7xl mx-auto px-4 lg:px-8 pt-6">
+
+        <!-- SUB-MENU 1: DASHBOARD & DIKW -->
+        <section id="owner-view-dashboard" class="space-y-6">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-5">
+            <div class="bg-white p-4 lg:p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <p class="text-xs font-semibold text-slate-500">Omzet Bulan Ini</p>
+              <h3 id="kpi-omzet" class="text-lg lg:text-2xl font-extrabold text-slate-900 mt-1">Rp0</h3>
+              <p id="kpi-target-persen" class="text-xs font-medium text-indigo-600 mt-1">0% dari Target</p>
+            </div>
+            <div class="bg-white p-4 lg:p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <p class="text-xs font-semibold text-slate-500">Total Item Terjual</p>
+              <h3 id="kpi-total-qty" class="text-lg lg:text-2xl font-extrabold text-emerald-600 mt-1">0 Unit</h3>
+              <p class="text-xs text-slate-500 mt-1">Akurat per item produk</p>
+            </div>
+            <div class="bg-white p-4 lg:p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <p class="text-xs font-semibold text-slate-500">Produk Terlaris</p>
+              <h3 id="kpi-best-seller" class="text-sm lg:text-base font-extrabold text-slate-900 mt-1 line-clamp-1">-</h3>
+              <p id="kpi-best-qty" class="text-xs text-emerald-600 font-semibold mt-1">0 unit terjual</p>
+            </div>
+            <div class="bg-white p-4 lg:p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <p class="text-xs font-semibold text-slate-500">Slow-Moving vs Habis</p>
+              <h3 id="kpi-slow-moving" class="text-base lg:text-lg font-extrabold text-rose-600 mt-1">0 Slow • 0 Habis</h3>
+              <button onclick="switchOwnerTab('ai')" class="text-xs font-bold text-indigo-600 hover:underline mt-1">Kelola Saran & Stok →</button>
+            </div>
+          </div>
+
+          <div class="bg-gradient-to-br from-indigo-950 via-slate-900 to-violet-950 text-white rounded-2xl p-5 lg:p-6 shadow-lg">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="p-2 rounded-xl bg-violet-500/20 border border-violet-400/30 text-violet-300">
+                  <i data-lucide="sparkles" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="font-bold text-base">Kesimpulan Evaluasi Bulanan Otomatis (DIKW)</h3>
+                  <p id="lbl-dikw-engine" class="text-[11px] text-violet-300">Smart Rule-Based DIKW Engine</p>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="mintaRangkumanGeminiOwner()" class="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-bold flex items-center gap-1.5 shadow">
+                  <i data-lucide="wand-2" class="w-3.5 h-3.5"></i> Pertajam Analisis AI
+                </button>
+                <button onclick="salinKesimpulanDIKW()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold">
+                  Salin
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4 text-xs leading-relaxed">
+              <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+                <span class="inline-block px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold mb-2">1. RINGKASAN INFORMASI</span>
+                <p id="dikw-info" class="text-slate-200">-</p>
+              </div>
+              <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+                <span class="inline-block px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold mb-2">2. TEMUAN POLA (KNOWLEDGE)</span>
+                <p id="dikw-know" class="text-slate-200">-</p>
+              </div>
+              <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+                <span class="inline-block px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold mb-2">3. ARAH STRATEGIS (WISDOM)</span>
+                <p id="dikw-wisdom" class="text-slate-200">-</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <h3 class="text-sm font-bold text-slate-800 mb-3">Grafik Tren Omzet Harian (30 Hari)</h3>
+              <div class="h-64"><canvas id="chart-omzet-harian"></canvas></div>
+            </div>
+            <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <h3 class="text-sm font-bold text-slate-800 mb-3">Peringkat Penjualan per Produk</h3>
+              <div class="h-64"><canvas id="chart-ranking-produk"></canvas></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SUB-MENU 2: RIWAYAT TRANSAKSI -->
+        <section id="owner-view-transaksi" class="hidden space-y-4">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row gap-3">
+            <input type="text" id="filter-cari-produk" oninput="renderTabelTransaksiOwner()" placeholder="Cari nama produk, barcode, atau ID struk..." class="flex-1 h-10 px-3.5 rounded-xl border border-slate-300 text-xs">
+            <input type="date" id="filter-tanggal-trx" onchange="renderTabelTransaksiOwner()" class="h-10 px-3 rounded-xl border border-slate-300 text-xs">
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                    <th class="py-3 px-4">ID Struk & Waktu</th>
+                    <th class="py-3 px-4">Item Produk</th>
+                    <th class="py-3 px-4">Qty</th>
+                    <th class="py-3 px-4">Subtotal</th>
+                    <th class="py-3 px-4">Kode Promo</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-owner-trx" class="divide-y divide-slate-100 text-xs"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SUB-MENU 3: AI AGENT & REKOMENDASI STRATEGI PRODUK -->
+        <section id="owner-view-ai" class="hidden space-y-5">
+          <div class="bg-violet-50 border border-violet-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-bold text-violet-950">AI Agent Rekomendasi Promo (Anti-False Alarm)</h3>
+              <p class="text-xs text-violet-800">Hanya menyarankan diskon jika penjualan turun ≥ ambang batas DAN stok masih menumpuk.</p>
+            </div>
+            <span id="chip-guardrail-ai" class="px-3 py-1.5 rounded-xl bg-white border border-violet-200 text-xs font-bold text-violet-700">
+              Diskon ≤ 15%
+            </span>
+          </div>
+
+          <div id="grid-saran-ai-produk" class="grid grid-cols-1 lg:grid-cols-2 gap-5"></div>
+        </section>
+
+        <!-- SUB-MENU 4: MANAJEMEN KATALOG PRODUK, STOK & TUTUP BUKU -->
+        <section id="owner-view-katalog" class="hidden space-y-4">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Manajemen Katalog Barcode, Stok & Tutup Buku</h3>
+              <p class="text-xs text-slate-500">Edit harga jual, restock barang habis, atau tutup buku bulanan.</p>
+            </div>
+            <button onclick="prosesTutupBukuOwner()" class="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow flex items-center gap-1.5">
+              <i data-lucide="calendar-check" class="w-4 h-4"></i> Tutup Buku Bulanan
+            </button>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                    <th class="py-3 px-4">Produk & Barcode</th>
+                    <th class="py-3 px-4">Harga (Rp)</th>
+                    <th class="py-3 px-4">Stok</th>
+                    <th class="py-3 px-4">Bln Lalu</th>
+                    <th class="py-3 px-4">Catatan</th>
+                    <th class="py-3 px-4">Status</th>
+                    <th class="py-3 px-4 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-katalog-owner" class="divide-y divide-slate-100 text-xs"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SUB-MENU 5: GUARDRAILS & LOG POAC -->
+        <section id="owner-view-guardrails" class="hidden space-y-6">
+          <form onsubmit="simpanGuardrailsOwner(event)" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 max-w-3xl">
+            <h3 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">Pengaturan Guardrails POAC</h3>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <div class="flex justify-between text-xs font-bold mb-1">
+                  <span>Batas Maksimal Diskon AI</span>
+                  <span id="txt-max-diskon" class="text-indigo-600">15%</span>
+                </div>
+                <input type="range" id="rng-max-diskon" min="5" max="40" value="15" oninput="document.getElementById('txt-max-diskon').textContent = this.value + '%'" class="w-full accent-indigo-600">
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs font-bold mb-1">
+                  <span>Ambang Penurunan Penjualan</span>
+                  <span id="txt-ambang-turun" class="text-rose-600">40%</span>
+                </div>
+                <input type="range" id="rng-ambang-turun" min="20" max="80" step="5" value="40" oninput="document.getElementById('txt-ambang-turun').textContent = this.value + '%'" class="w-full accent-rose-600">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Min. Stok Slow-Moving</label>
+                <input type="number" id="inp-min-stok-slow" min="1" value="5" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs font-bold">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Target Omzet Bulanan (Rp)</label>
+                <input type="number" id="inp-target-omzet" min="100000" value="10000000" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs font-bold">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Ubah PIN Owner</label>
+                <input type="text" id="inp-pin-baru" value="123456" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs font-mono">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">Gemini API Key (Opsional: Rangkuman DIKW & Baca Foto Kemasan)</label>
+              <input type="password" id="inp-gemini-key" placeholder="AIzaSy... (Kosongkan jika pakai mode rule-based bawaan)" class="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs">
+            </div>
+
+            <button type="submit" class="px-5 h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow">
+              Simpan Pengaturan Guardrails
+            </button>
+          </form>
+
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div class="p-4 border-b border-slate-200">
+              <h3 class="text-sm font-bold text-slate-900">Log Evaluasi & Controlling (Closed-Loop Feedback)</h3>
+              <p class="text-xs text-slate-500">Memantau efektivitas promo AI terhadap peningkatan penjualan produk</p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                    <th class="py-3 px-4">Waktu</th>
+                    <th class="py-3 px-4">Produk</th>
+                    <th class="py-3 px-4">Strategi & Kode Promo</th>
+                    <th class="py-3 px-4">Status</th>
+                    <th class="py-3 px-4">Hasil Evaluasi (Controlling)</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-log-poac" class="divide-y divide-slate-100 text-xs"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Mobile Bottom Bar Owner (5 Menu) -->
+    <nav class="flex lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 px-1 py-1.5 justify-around shadow-lg">
+      <button onclick="switchOwnerTab('dashboard')" id="mob-tab-dashboard" class="flex flex-col items-center py-1 px-1.5 text-indigo-600 font-bold text-[10px]">
+        <i data-lucide="layout-dashboard" class="w-4 h-4 mb-0.5"></i> DIKW
+      </button>
+      <button onclick="switchOwnerTab('transaksi')" id="mob-tab-transaksi" class="flex flex-col items-center py-1 px-1.5 text-slate-500 font-medium text-[10px]">
+        <i data-lucide="receipt-text" class="w-4 h-4 mb-0.5"></i> Transaksi
+      </button>
+      <button onclick="switchOwnerTab('ai')" id="mob-tab-ai" class="relative flex flex-col items-center py-1 px-1.5 text-slate-500 font-medium text-[10px]">
+        <i data-lucide="sparkles" class="w-4 h-4 mb-0.5"></i> AI Agent
+        <span id="badge-ai-mob" class="absolute top-0 right-0 px-1 text-[9px] font-bold rounded-full bg-rose-500 text-white">0</span>
+      </button>
+      <button onclick="switchOwnerTab('katalog')" id="mob-tab-katalog" class="flex flex-col items-center py-1 px-1.5 text-slate-500 font-medium text-[10px]">
+        <i data-lucide="package" class="w-4 h-4 mb-0.5"></i> Katalog
+      </button>
+      <button onclick="switchOwnerTab('guardrails')" id="mob-tab-guardrails" class="flex flex-col items-center py-1 px-1.5 text-slate-500 font-medium text-[10px]">
+        <i data-lucide="sliders-horizontal" class="w-4 h-4 mb-0.5"></i> Aturan
+      </button>
+    </nav>
+  </div>
+
+  <!-- Global Loading & Toast -->
+  <div id="global-loading" class="hidden fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center">
+    <div class="bg-white px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3">
+      <div class="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      <span id="global-loading-txt" class="text-sm font-semibold text-slate-700">Memproses...</span>
+    </div>
+  </div>
+
+  <div id="global-toast" class="hidden fixed bottom-20 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-xs font-semibold text-center max-w-xs">
+    <span id="global-toast-txt"></span>
+  </div>
+
+  <script>
+    // =========================================================================
+    // TEMPEL URL WEB APP (/exec) DARI GOOGLE APPS SCRIPT DI BARIS BERIKUT INI:
+    // =========================================================================
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz4drr8YGgXFtY8LMukyDvgq_M9rETIgvugi4p6Q6W3m6jOk2iG7Zw0QvTTHaXEA6L4ZA/exec";
+
+    /**
+     * Jembatan API Universal: Otomatis memakai google.script.run jika dibuka di GAS,
+     * atau memakai fetch() POST jika di-host di GitHub Pages / Netlify.
+     */
+    function callBackend(action, payload = {}) {
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise((resolve, reject) => {
+          const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+          switch (action) {
+            case "getDataKasirInit": runner.getDataKasirInit(); break;
+            case "ekstrakInfoProdukDariFoto": runner.ekstrakInfoProdukDariFoto(payload.base64Image); break;
+            case "daftarProdukBaruKasir": runner.daftarProdukBaruKasir(payload); break;
+            case "cekKodePromoKasir": runner.cekKodePromoKasir(payload.kode); break;
+            case "simpanTransaksiKasir": runner.simpanTransaksiKasir(payload); break;
+            case "verifikasiPinOwner": runner.verifikasiPinOwner(payload.pin); break;
+            case "getAllDashboardOwner": runner.getAllDashboardOwner(payload.pin); break;
+            case "generateKesimpulanAIBulanan": runner.generateKesimpulanAIBulanan(payload.pin); break;
+            case "updateProdukOwner": runner.updateProdukOwner(payload.pin, payload.data); break;
+            case "tutupBukuBulananOwner": runner.tutupBukuBulananOwner(payload.pin); break;
+            case "setujuiRekomendasiAI": runner.setujuiRekomendasiAI(payload.pin, payload.data); break;
+            case "abaikanRekomendasiAI": runner.abaikanRekomendasiAI(payload.pin, payload.data); break;
+            case "simulasiPromoBerhasil": runner.simulasiPromoBerhasil(payload.pin, payload.idSaran); break;
+            case "updateGuardrailsPOAC": runner.updateGuardrailsPOAC(payload.pin, payload.params); break;
+            default: reject(new Error("Action tidak dikenal: " + action));
+          }
+        });
+      }
+
+      if (!GAS_API_URL || GAS_API_URL.indexOf("http") !== 0) {
+        return Promise.reject(new Error("URL Web App (/exec) belum diisi pada variabel GAS_API_URL di index.html"));
+      }
+
+      return fetch(GAS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: action, payload: payload })
+      })
+      .then(res => res.json())
+      .then(json => {
+        if (!json.ok) throw new Error(json.error || "Terjadi kesalahan pada server.");
+        return json.data;
+      });
+    }
+
+    let masterProdukList = [];
+    let keranjangKasir = [];
+    let diskonPromoAktif = 0;
+    let fotoProdukBaruBase64 = "";
+    let isSubmittingKasir = false;
+
+    // State Scanner Barcode Ala AsistenToko
+    let html5QrScanner = null;
+    let isScannerRunning = false;
+    let lastScannedCode = "";
+    let lastScannedTime = 0;
+    let audioCtx = null;
+
+    let verifiedOwnerPin = "";
+    let ownerData = null;
+    let chartOmzetInst = null;
+    let chartProdukInst = null;
+
+    let ownerIdleSeconds = 300;
+    let ownerIdleInterval = null;
+
+    window.onload = function() {
+      lucide.createIcons();
+      muatDataKasir();
+      ['click', 'touchstart', 'keydown', 'mousemove'].forEach(evt => {
+        document.addEventListener(evt, () => {
+          if (verifiedOwnerPin) ownerIdleSeconds = 300;
+        }, { passive: true });
+      });
+    };
+
+    function showLoader(msg) {
+      document.getElementById('global-loading-txt').textContent = msg || 'Memproses...';
+      document.getElementById('global-loading').classList.remove('hidden');
+    }
+
+    function hideLoader() {
+      document.getElementById('global-loading').classList.add('hidden');
+    }
+
+    function toast(msg) {
+      const el = document.getElementById('global-toast');
+      document.getElementById('global-toast-txt').textContent = msg;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 3200);
+    }
+
+    function rp(n) {
+      return 'Rp' + Number(n || 0).toLocaleString('id-ID');
+    }
+
+    /* ========================================================================
+       SUARA "BEEP" KASIR OTOMATIS (WEB AUDIO API)
+       ======================================================================== */
+    function mainkanSuaraBeepKasir(isSuccess = true) {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = isSuccess ? 'sine' : 'sawtooth';
+        osc.frequency.setValueAtTime(isSuccess ? 1850 : 320, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (isSuccess ? 0.11 : 0.25));
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + (isSuccess ? 0.11 : 0.25));
+      } catch (e) {}
+    }
+
+    /* ========================================================================
+       MODE SCAN BARCODE KONTINU ALA ASISTENTOKO (html5-qrcode)
+       ======================================================================== */
+    function toggleLiveBarcodeScanner() {
+      if (isScannerRunning) {
+        hentikanLiveBarcodeScanner();
+        return;
+      }
+
+      mainkanSuaraBeepKasir(true);
+
+      const wrap = document.getElementById('wrap-reader-barcode');
+      const badge = document.getElementById('badge-scanner-status');
+      const lbl = document.getElementById('lbl-toggle-barcode');
+
+      wrap.classList.remove('hidden');
+      badge.textContent = 'Membuka Kamera...';
+      badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700';
+
+      if (!html5QrScanner) {
+        html5QrScanner = new Html5Qrcode("reader-barcode");
+      }
+
+      const config = {
+        fps: 15,
+        qrbox: { width: 250, height: 130 },
+        aspectRatio: 1.5
+      };
+
+      html5QrScanner.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => {
+          prosesHasilScanBarcode(decodedText);
+        },
+        () => {}
+      ).then(() => {
+        isScannerRunning = true;
+        lbl.textContent = 'Hentikan Scan';
+        badge.textContent = 'Aktif Memindai';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
+      }).catch(err => {
+        wrap.classList.add('hidden');
+        badge.textContent = 'Izin Kamera Ditolak';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700';
+        toast('Kamera live gagal dibuka (' + err + '). Pastikan izin kamera aktif atau gunakan Foto Barcode.');
+      });
+    }
+
+    function hentikanLiveBarcodeScanner() {
+      if (html5QrScanner && isScannerRunning) {
+        html5QrScanner.stop().then(() => {
+          isScannerRunning = false;
+          document.getElementById('wrap-reader-barcode').classList.add('hidden');
+          document.getElementById('lbl-toggle-barcode').textContent = 'Mulai Scan Live';
+          document.getElementById('badge-scanner-status').textContent = 'Standby';
+          document.getElementById('badge-scanner-status').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600';
+        }).catch(() => {});
+      }
+    }
+
+    function scanBarcodeDariFoto(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      showLoader('Membaca barcode dari foto...');
+      const fileScanner = new Html5Qrcode("reader-file-hidden");
+      fileScanner.scanFile(file, true)
+        .then(decodedText => {
+          hideLoader();
+          prosesHasilScanBarcode(decodedText, true);
+        })
+        .catch(() => {
+          hideLoader();
+          toast('Barcode tidak terbaca jelas pada foto. Pastikan garis barcode fokus & terang.');
+        });
+      event.target.value = '';
+    }
+
+    function prosesHasilScanBarcode(rawCode, bypassCooldown = false) {
+      const cleanCode = String(rawCode || "").trim().toUpperCase();
+      if (!cleanCode) return;
+
+      const now = Date.now();
+      if (!bypassCooldown && cleanCode === lastScannedCode && (now - lastScannedTime) < 1500) {
+        return;
+      }
+      lastScannedCode = cleanCode;
+      lastScannedTime = now;
+
+      const lblLast = document.getElementById('txt-last-scanned');
+      if (lblLast) lblLast.textContent = `Terbaca: ${cleanCode}`;
+
+      const found = masterProdukList.find(p => p.kode.toUpperCase() === cleanCode);
+      if (found) {
+        mainkanSuaraBeepKasir(true);
+        tambahProdukKeKeranjang(found, 1);
+      } else {
+        mainkanSuaraBeepKasir(false);
+        hentikanLiveBarcodeScanner();
+        toast(`Barcode ${cleanCode} belum terdaftar! Silakan lengkapi nama & harga.`);
+        bukaModalDaftarProduk(cleanCode);
+      }
+    }
+
+    /* ========================================================================
+       ZONA 1: KASIR (KERANJANG TERSTRUKTUR & KALKULATOR KEMBALIAN)
+       ======================================================================== */
+    function muatDataKasir() {
+      showLoader('Menghubungkan ke database kasir...');
+      callBackend('getDataKasirInit')
+        .then(res => {
+          hideLoader();
+          renderKasirUI(res);
+        })
+        .catch(err => {
+          hideLoader();
+          toast('Gagal memuat kasir: ' + err.message);
+        });
+    }
+
+    function renderKasirUI(res) {
+      document.getElementById('label-shift-kasir').textContent = 'Shift Aktif: ' + res.tanggalHariIni;
+      masterProdukList = res.produk || [];
+
+      const grid = document.getElementById('grid-quick-tap');
+      grid.innerHTML = '';
+      masterProdukList.filter(p => p.quickTap).forEach(p => {
+        const habis = p.stok <= 0;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.disabled = habis;
+        btn.className = `tap-btn text-left p-2.5 rounded-xl border transition flex items-center gap-2.5 ${
+          habis
+            ? 'border-slate-200 bg-slate-100 opacity-60 cursor-not-allowed'
+            : 'border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300'
+        }`;
+        const thumbHtml = p.fotoUrl
+          ? `<img src="${p.fotoUrl}" class="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-200">`
+          : `<div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shrink-0">${p.kode.slice(-3)}</div>`;
+        btn.innerHTML = `
+          ${thumbHtml}
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-bold text-slate-800 truncate">${p.nama}</div>
+            <div class="flex items-center justify-between text-[11px] mt-0.5">
+              <span class="font-semibold text-emerald-600">${rp(p.harga)}</span>
+              <span class="${habis ? 'text-rose-600 font-bold' : 'text-slate-400'}">${habis ? 'Habis' : 'Stok:' + p.stok}</span>
+            </div>
+          </div>
+        `;
+        btn.onclick = () => {
+          mainkanSuaraBeepKasir(true);
+          tambahProdukKeKeranjang(p, 1);
+        };
+        grid.appendChild(btn);
+      });
+
+      const listEl = document.getElementById('list-riwayat-shift');
+      const items = res.riwayatHariIni || [];
+      document.getElementById('badge-trx-hari-ini').textContent = `${items.length} Struk`;
+
+      if (items.length === 0) {
+        listEl.innerHTML = '<p class="text-xs text-slate-400 py-4 text-center">Belum ada transaksi tercatat pada shift hari ini.</p>';
+      } else {
+        listEl.innerHTML = items.map(t => `
+          <div class="py-2.5 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[11px] font-mono font-bold text-slate-500">${t.id} • ${t.waktu}</span>
+              </div>
+              <p class="text-xs font-bold text-slate-800 truncate">${t.items.join(', ')}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="text-xs font-extrabold text-emerald-700">${rp(t.totalNominal)}</div>
+              ${t.promo && t.promo !== '-' ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">${t.promo}</span>` : ''}
+            </div>
+          </div>
+        `).join('');
+      }
+      renderKeranjangKasir();
+    }
+
+    function tambahProdukKeKeranjang(prod, qtyTambah) {
+      if (prod.stok <= 0) {
+        toast(`Stok ${prod.nama} sedang habis!`);
+        return;
+      }
+      const existing = keranjangKasir.find(x => x.kode === prod.kode);
+      if (existing) {
+        if (existing.qty + qtyTambah > prod.stok) {
+          toast(`Maksimal stok ${prod.nama} tersisa ${prod.stok} unit.`);
+          existing.qty = prod.stok;
+        } else {
+          existing.qty += qtyTambah;
+        }
+      } else {
+        keranjangKasir.push({
+          kode: prod.kode,
+          nama: prod.nama,
+          harga: prod.harga,
+          qty: Math.min(qtyTambah, prod.stok),
+          stokMax: prod.stok
+        });
+      }
+      renderKeranjangKasir();
+      toast(`+ ${prod.nama}`);
+    }
+
+    function ubahQtyKeranjang(idx, delta) {
+      const item = keranjangKasir[idx];
+      if (!item) return;
+      const nextQty = item.qty + delta;
+      if (nextQty <= 0) {
+        keranjangKasir.splice(idx, 1);
+      } else if (nextQty > item.stokMax) {
+        toast(`Stok ${item.nama} hanya tersisa ${item.stokMax} unit.`);
+      } else {
+        item.qty = nextQty;
+      }
+      renderKeranjangKasir();
+    }
+
+    function renderKeranjangKasir() {
+      const box = document.getElementById('list-keranjang-kasir');
+      const badgeQty = document.getElementById('badge-total-qty-cart');
+
+      if (keranjangKasir.length === 0) {
+        box.innerHTML = '<p class="text-xs text-slate-400 py-5 text-center">Keranjang kosong. Scan barcode atau tap produk di atas.</p>';
+        badgeQty.textContent = '0 Item';
+        document.getElementById('display-total-tagihan').textContent = 'Rp0';
+        document.getElementById('display-total-tagihan').dataset.rawTotal = 0;
+        hitungKembalianKasir();
+        return;
+      }
+
+      let totalQty = 0;
+      let subtotal = 0;
+      box.innerHTML = keranjangKasir.map((item, idx) => {
+        totalQty += item.qty;
+        const sub = item.harga * item.qty;
+        subtotal += sub;
+        return `
+          <div class="py-2.5 flex items-center justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-bold text-slate-800 truncate">${item.nama}</div>
+              <div class="text-[11px] text-slate-500">${rp(item.harga)} × ${item.qty} = <strong class="text-slate-700">${rp(sub)}</strong></div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" onclick="ubahQtyKeranjang(${idx}, -1)" class="w-7 h-7 rounded-lg bg-white border border-slate-300 font-bold text-slate-700 hover:bg-slate-100">-</button>
+              <span class="w-6 text-center text-xs font-extrabold">${item.qty}</span>
+              <button type="button" onclick="ubahQtyKeranjang(${idx}, 1)" class="w-7 h-7 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700">+</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const finalTotal = diskonPromoAktif > 0 ? Math.round(subtotal * (1 - diskonPromoAktif / 100)) : subtotal;
+      badgeQty.textContent = `${totalQty} Unit (${keranjangKasir.length} Jenis)`;
+      document.getElementById('display-total-tagihan').textContent = rp(finalTotal);
+      document.getElementById('display-total-tagihan').dataset.rawTotal = finalTotal;
+      hitungKembalianKasir();
+    }
+
+    function hitungKembalianKasir() {
+      const totalTagihan = Number(document.getElementById('display-total-tagihan').dataset.rawTotal) || 0;
+      const uangDiterima = Number(document.getElementById('input-uang-diterima').value) || 0;
+      const elKembali = document.getElementById('display-kembalian');
+
+      if (uangDiterima <= 0 || totalTagihan <= 0) {
+        elKembali.textContent = 'Rp0';
+        elKembali.className = 'h-10 px-3 rounded-xl bg-slate-800/60 border border-slate-800 flex items-center font-extrabold text-sm text-slate-300';
+        return;
+      }
+
+      const selisih = uangDiterima - totalTagihan;
+      if (selisih < 0) {
+        elKembali.textContent = 'Kurang ' + rp(Math.abs(selisih));
+        elKembali.className = 'h-10 px-3 rounded-xl bg-rose-950/60 border border-rose-800 flex items-center font-extrabold text-xs text-rose-400';
+      } else {
+        elKembali.textContent = rp(selisih);
+        elKembali.className = 'h-10 px-3 rounded-xl bg-emerald-950/60 border border-emerald-800 flex items-center font-extrabold text-sm text-emerald-400';
+      }
+    }
+
+    function tambahViaKodeManual() {
+      const kode = document.getElementById('input-kode-manual').value.trim().toUpperCase();
+      if (!kode) return;
+      document.getElementById('input-kode-manual').value = '';
+      prosesHasilScanBarcode(kode, true);
+    }
+
+    function resetKeranjangKasir() {
+      keranjangKasir = [];
+      diskonPromoAktif = 0;
+      document.getElementById('input-kode-promo').value = '';
+      document.getElementById('input-uang-diterima').value = '';
+      document.getElementById('msg-status-promo').classList.add('hidden');
+      document.getElementById('display-total-tagihan').dataset.rawTotal = 0;
+      renderKeranjangKasir();
+    }
+
+    function cekPromoKasir() {
+      const kode = document.getElementById('input-kode-promo').value.trim();
+      if (!kode) return;
+      showLoader('Memeriksa kode promo...');
+      callBackend('cekKodePromoKasir', { kode: kode })
+        .then(res => {
+          hideLoader();
+          const msg = document.getElementById('msg-status-promo');
+          msg.classList.remove('hidden', 'text-emerald-600', 'text-rose-600');
+          if (res.valid) {
+            diskonPromoAktif = res.diskonPersen;
+            msg.textContent = '✔ ' + res.message;
+            msg.classList.add('text-emerald-600');
+            renderKeranjangKasir();
+          } else {
+            diskonPromoAktif = 0;
+            msg.textContent = '✕ ' + res.message;
+            msg.classList.add('text-rose-600');
+            renderKeranjangKasir();
+          }
+        })
+        .catch(err => {
+          hideLoader();
+          toast('Error promo: ' + err.message);
+        });
+    }
+
+    function simpanTransaksi(e) {
+      e.preventDefault();
+      if (isSubmittingKasir) return;
+      if (keranjangKasir.length === 0) {
+        toast('Keranjang belanja masih kosong.');
+        return;
+      }
+
+      isSubmittingKasir = true;
+      showLoader('Menyimpan struk & memotong stok produk...');
+      callBackend('simpanTransaksiKasir', {
+        items: keranjangKasir,
+        kodePromo: document.getElementById('input-kode-promo').value.trim(),
+        diskonPersen: diskonPromoAktif
+      })
+      .then(res => {
+        isSubmittingKasir = false;
+        hideLoader();
+        resetKeranjangKasir();
+        renderKasirUI(res);
+        toast(res.toastMessage || 'Transaksi tersimpan!');
+      })
+      .catch(err => {
+        isSubmittingKasir = false;
+        hideLoader();
+        toast('Gagal simpan: ' + err.message);
+      });
+    }
+
+    /* ========================================================================
+       MODAL REGISTRASI PRODUK BARU + BARCODE + FOTO GOOGLE DRIVE
+       ======================================================================== */
+    function bukaModalDaftarProduk(prefillBarcode) {
+      fotoProdukBaruBase64 = "";
+      document.getElementById('preview-foto-baru').classList.add('hidden');
+      document.getElementById('btn-autofill-ai').classList.add('hidden');
+
+      const kodeInput = document.getElementById('reg-kode-produk');
+      if (prefillBarcode) {
+        kodeInput.value = prefillBarcode;
+        document.getElementById('sub-modal-daftar').textContent = `Barcode baru terdeteksi: ${prefillBarcode}`;
+      } else {
+        const nextNum = masterProdukList.length + 1;
+        kodeInput.value = 'PRD-' + String(nextNum).padStart(3, '0');
+        document.getElementById('sub-modal-daftar').textContent = 'Tersimpan ke Master_Produk & Google Drive';
+      }
+
+      document.getElementById('reg-nama-produk').value = '';
+      document.getElementById('reg-harga-produk').value = '';
+      document.getElementById('reg-kategori-produk').value = '';
+      document.getElementById('reg-catatan-produk').value = '';
+      document.getElementById('modal-daftar-produk').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function tutupModalDaftarProduk() {
+      document.getElementById('modal-daftar-produk').classList.add('hidden');
+    }
+
+    function prosesFotoProdukBaru(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.getElementById('canvas-kompresi');
+          const scale = Math.min(1, 500 / img.width);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          fotoProdukBaruBase64 = canvas.toDataURL('image/jpeg', 0.75);
+
+          const prev = document.getElementById('preview-foto-baru');
+          prev.src = fotoProdukBaruBase64;
+          prev.classList.remove('hidden');
+          document.getElementById('btn-autofill-ai').classList.remove('hidden');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function autoFillDariFotoBaru() {
+      if (!fotoProdukBaruBase64) return;
+      showLoader('Membaca nama kemasan dari foto...');
+      callBackend('ekstrakInfoProdukDariFoto', { base64Image: fotoProdukBaruBase64 })
+        .then(res => {
+          hideLoader();
+          if (res.success) {
+            document.getElementById('reg-nama-produk').value = res.nama;
+            document.getElementById('reg-kategori-produk').value = res.kategori;
+            document.getElementById('reg-catatan-produk').value = res.catatan;
+            toast('✨ Nama & kategori terisi otomatis!');
+          } else {
+            toast(res.message);
+          }
+        })
+        .catch(err => {
+          hideLoader();
+          toast('Gagal baca foto: ' + err.message);
+        });
+    }
+
+    function simpanProdukBaru(e) {
+      e.preventDefault();
+      showLoader('Menyimpan produk & mengunggah foto ke Drive...');
+      callBackend('daftarProdukBaruKasir', {
+        kode: document.getElementById('reg-kode-produk').value.trim(),
+        nama: document.getElementById('reg-nama-produk').value.trim(),
+        harga: document.getElementById('reg-harga-produk').value,
+        kategori: document.getElementById('reg-kategori-produk').value.trim(),
+        stok: document.getElementById('reg-stok-produk').value,
+        catatan: document.getElementById('reg-catatan-produk').value.trim(),
+        quickTap: document.getElementById('reg-quick-tap').checked,
+        gambarBase64: fotoProdukBaruBase64
+      })
+      .then(res => {
+        hideLoader();
+        tutupModalDaftarProduk();
+        renderKasirUI(res);
+        toast(res.toastMessage || 'Produk tersimpan!');
+      })
+      .catch(err => {
+        hideLoader();
+        toast('Gagal daftar produk: ' + err.message);
+      });
+    }
+
+    /* ========================================================================
+       ZONA 2: PIN GATE, AUTO-LOCK 5 MENIT & DASBOR OWNER
+       ======================================================================== */
+    function bukaModalPinOwner() {
+      hentikanLiveBarcodeScanner();
+      document.getElementById('input-pin-owner').value = '';
+      document.getElementById('err-pin-owner').classList.add('hidden');
+      document.getElementById('modal-pin-owner').classList.remove('hidden');
+    }
+
+    function tutupModalPinOwner() {
+      document.getElementById('modal-pin-owner').classList.add('hidden');
+    }
+
+    function verifikasiPinMasukOwner(e) {
+      e.preventDefault();
+      const pin = document.getElementById('input-pin-owner').value.trim();
+      showLoader('Memverifikasi PIN Owner...');
+
+      callBackend('verifikasiPinOwner', { pin: pin })
+        .then(res => {
+          if (res.valid) {
+            verifiedOwnerPin = pin;
+            tutupModalPinOwner();
+            document.getElementById('zone-kasir').classList.add('hidden');
+            document.getElementById('zone-owner').classList.remove('hidden');
+            mulaiTimerAutoLockOwner();
+            muatDataOwner();
+          } else {
+            hideLoader();
+            document.getElementById('err-pin-owner').classList.remove('hidden');
+          }
+        })
+        .catch(err => {
+          hideLoader();
+          toast('Error PIN: ' + err.message);
+        });
+    }
+
+    function mulaiTimerAutoLockOwner() {
+      ownerIdleSeconds = 300;
+      if (ownerIdleInterval) clearInterval(ownerIdleInterval);
+      ownerIdleInterval = setInterval(() => {
+        if (!verifiedOwnerPin) return;
+        ownerIdleSeconds--;
+        const m = String(Math.floor(ownerIdleSeconds / 60)).padStart(2, '0');
+        const s = String(ownerIdleSeconds % 60).padStart(2, '0');
+        document.getElementById('lbl-autolock-desk').textContent = `Auto-Lock: ${m}:${s}`;
+        document.getElementById('lbl-autolock-mob').textContent = `Auto-Lock: ${m}:${s}`;
+
+        if (ownerIdleSeconds <= 0) {
+          kunciDanKembaliKeKasir('Sesi Owner dikunci otomatis (5 menit idle) 🔒');
+        }
+      }, 1000);
+    }
+
+    function kunciDanKembaliKeKasir(pesan) {
+      verifiedOwnerPin = "";
+      ownerData = null;
+      if (ownerIdleInterval) clearInterval(ownerIdleInterval);
+      document.getElementById('zone-owner').classList.add('hidden');
+      document.getElementById('zone-kasir').classList.remove('hidden');
+      muatDataKasir();
+      toast(pesan || 'Sesi Owner dikunci 🔒');
+    }
+
+    function muatDataOwner() {
+      showLoader('Memuat analitik DIKW, stok & strategi Owner...');
+      callBackend('getAllDashboardOwner', { pin: verifiedOwnerPin })
+        .then(data => {
+          hideLoader();
+          ownerData = data;
+          renderOwnerDashboard();
+        })
+        .catch(err => {
+          hideLoader();
+          toast('Gagal memuat Owner: ' + err.message);
+        });
+    }
+
+    function switchOwnerTab(tab) {
+      ['dashboard', 'transaksi', 'ai', 'katalog', 'guardrails'].forEach(t => {
+        document.getElementById('owner-view-' + t).classList.toggle('hidden', t !== tab);
+        const dBtn = document.getElementById('desk-tab-' + t);
+        const mBtn = document.getElementById('mob-tab-' + t);
+        if (t === tab) {
+          dBtn.className = 'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 text-white';
+          mBtn.className = 'relative flex flex-col items-center py-1 px-1.5 text-indigo-600 font-bold text-[10px]';
+        } else {
+          dBtn.className = 'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800';
+          mBtn.className = 'relative flex flex-col items-center py-1 px-1.5 text-slate-500 font-medium text-[10px]';
+        }
+      });
+
+      const judul = {
+        dashboard: 'Dashboard & Evaluasi Bulanan (DIKW)',
+        transaksi: 'Riwayat Lengkap Transaksi (Per Item)',
+        ai: 'AI Agent & Rekomendasi Promo Produk',
+        katalog: 'Manajemen Katalog Barcode, Stok & Tutup Buku',
+        guardrails: 'Pengaturan Guardrails POAC'
+      };
+      document.getElementById('owner-header-title').textContent = judul[tab];
+    }
+
+    function renderOwnerDashboard() {
+      if (!ownerData) return;
+      const { kpi, kesimpulanDIKW, rekomendasiAI, guardrails } = ownerData;
+
+      document.getElementById('kpi-omzet').textContent = rp(kpi.totalOmzetBulanIni);
+      document.getElementById('kpi-target-persen').textContent = `${kpi.capaianTargetPersen}% dari Target (${rp(kpi.targetOmzet)})`;
+      document.getElementById('kpi-total-qty').textContent = `${kpi.totalItemTerjualIni} Unit`;
+      document.getElementById('kpi-best-seller').textContent = kpi.bestSellerNama;
+      document.getElementById('kpi-best-qty').textContent = `${kpi.bestSellerQty} unit terjual`;
+      document.getElementById('kpi-slow-moving').textContent = `${kpi.slowMovingCount} Slow • ${kpi.outOfStockCount} Habis`;
+
+      document.getElementById('badge-ai-desk').textContent = rekomendasiAI.length;
+      document.getElementById('badge-ai-mob').textContent = rekomendasiAI.length;
+      document.getElementById('chip-guardrail-ai').textContent = `Diskon ≤ ${guardrails.Max_Diskon_Persen}% • Min Stok ≥ ${guardrails.Min_Stok_SlowMoving}`;
+
+      renderDIKWSummary(kesimpulanDIKW);
+
+      document.getElementById('rng-max-diskon').value = guardrails.Max_Diskon_Persen;
+      document.getElementById('txt-max-diskon').textContent = guardrails.Max_Diskon_Persen + '%';
+      document.getElementById('rng-ambang-turun').value = guardrails.Ambang_Turun_Produk_Persen;
+      document.getElementById('txt-ambang-turun').textContent = guardrails.Ambang_Turun_Produk_Persen + '%';
+      document.getElementById('inp-min-stok-slow').value = guardrails.Min_Stok_SlowMoving;
+      document.getElementById('inp-target-omzet').value = guardrails.Target_Omzet_Bulanan;
+      document.getElementById('inp-pin-baru').value = guardrails.PIN_Owner;
+
+      renderOwnerCharts();
+      renderTabelTransaksiOwner();
+      renderSaranAIProduk();
+      renderKatalogOwner();
+      renderLogPOACOwner();
+      lucide.createIcons();
+    }
+
+    function renderDIKWSummary(dikw) {
+      if (!dikw) return;
+      document.getElementById('lbl-dikw-engine').textContent = dikw.sumberEngine;
+      document.getElementById('dikw-info').textContent = dikw.ringkasanInformasi;
+      document.getElementById('dikw-know').textContent = dikw.temuanKnowledge;
+      document.getElementById('dikw-wisdom').textContent = dikw.saranWisdom;
+    }
+
+    function mintaRangkumanGeminiOwner() {
+      showLoader('Menyusun evaluasi & saran strategis...');
+      callBackend('generateKesimpulanAIBulanan', { pin: verifiedOwnerPin })
+        .then(res => {
+          hideLoader();
+          ownerData.kesimpulanDIKW = res;
+          renderDIKWSummary(res);
+          toast('Rangkuman evaluasi diperbarui!');
+        })
+        .catch(err => {
+          hideLoader();
+          toast('Gagal menyusun evaluasi: ' + err.message);
+        });
+    }
+
+    function salinKesimpulanDIKW() {
+      const d = ownerData.kesimpulanDIKW;
+      const teks = `EVALUASI BULANAN KENDALIKAN (DIKW)\n\n1. INFORMASI:\n${d.ringkasanInformasi}\n\n2. KNOWLEDGE:\n${d.temuanKnowledge}\n\n3. WISDOM:\n${d.saranWisdom}`;
+      navigator.clipboard.writeText(teks);
+      toast('Laporan DIKW disalin!');
+    }
+
+    function renderOwnerCharts() {
+      const ctxOmzet = document.getElementById('chart-omzet-harian').getContext('2d');
+      if (chartOmzetInst) chartOmzetInst.destroy();
+      chartOmzetInst = new Chart(ctxOmzet, {
+        type: 'bar',
+        data: {
+          labels: ownerData.grafikHarian.map(g => g.hari),
+          datasets: [{
+            label: 'Omzet Harian (Rp)',
+            data: ownerData.grafikHarian.map(g => g.omzet),
+            backgroundColor: '#4F46E5',
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { display: false } },
+            y: { ticks: { font: { size: 10 } } }
+          }
+        }
+      });
+
+      const ctxProd = document.getElementById('chart-ranking-produk').getContext('2d');
+      if (chartProdukInst) chartProdukInst.destroy();
+      chartProdukInst = new Chart(ctxProd, {
+        type: 'bar',
+        data: {
+          labels: ownerData.rankingProduk.map(p => p.nama.slice(0, 16)),
+          datasets: [
+            { label: 'Bulan Ini', data: ownerData.rankingProduk.map(p => p.terjualIni), backgroundColor: '#10B981', borderRadius: 4 },
+            { label: 'Bulan Lalu', data: ownerData.rankingProduk.map(p => p.terjualLalu), backgroundColor: '#CBD5E1', borderRadius: 4 }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+          scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } }
+        }
+      });
+    }
+
+    function renderTabelTransaksiOwner() {
+      if (!ownerData) return;
+      const q = document.getElementById('filter-cari-produk').value.toLowerCase();
+      const tglFilter = document.getElementById('filter-tanggal-trx').value;
+      const tbody = document.getElementById('tbody-owner-trx');
+
+      const filtered = ownerData.transaksiBulanIni.filter(t => {
+        const matchText = t.item.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || t.kode.toLowerCase().includes(q);
+        const matchDate = !tglFilter || t.tanggal === tglFilter;
+        return matchText && matchDate;
+      });
+
+      tbody.innerHTML = filtered.map(t => `
+        <tr class="hover:bg-slate-50">
+          <td class="py-3 px-4 font-mono text-slate-500">${t.id} • ${t.tanggal} ${t.waktu}</td>
+          <td class="py-3 px-4 font-bold text-slate-800">${t.item} <span class="text-[10px] text-slate-400 font-mono">(${t.kode})</span></td>
+          <td class="py-3 px-4 font-semibold">${t.qty} unit</td>
+          <td class="py-3 px-4 font-extrabold text-slate-900">${rp(t.nominal)}</td>
+          <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px]">${t.promo}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderSaranAIProduk() {
+      const grid = document.getElementById('grid-saran-ai-produk');
+      const list = ownerData.rekomendasiAI || [];
+
+      if (list.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full bg-white p-8 rounded-2xl border border-slate-200 text-center">
+            <p class="text-sm font-bold text-slate-700">Tidak ada produk slow-moving berstok tinggi yang menunggu promo.</p>
+            <p class="text-xs text-slate-500 mt-1">Produk yang stoknya habis otomatis dipisahkan ke menu Katalog & Stok untuk di-restock.</p>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = list.map((r, idx) => `
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between space-y-4">
+          <div>
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <h4 class="font-extrabold text-base text-slate-900">${r.namaProduk}</h4>
+                <p class="text-xs text-slate-500 font-mono">${r.kodeProduk} • Sisa Stok: <strong class="text-amber-700">${r.stokTersisa} unit</strong></p>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                Turun ${r.penurunanPersen}%
+              </span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+              <div>
+                <span class="text-slate-400 block text-[10px]">Bln Lalu</span>
+                <span class="font-bold text-slate-800">${r.terjualLalu} unit</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[10px]">Bln Ini</span>
+                <span class="font-bold text-rose-600">${r.terjualIni} unit</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[10px]">Stok Tersisa</span>
+                <span class="font-bold text-amber-700">${r.stokTersisa} unit</span>
+              </div>
+            </div>
+
+            <p class="text-xs text-slate-600 mt-3 leading-relaxed">
+              <strong class="text-slate-800">Diagnosis:</strong> ${r.diagnosis}
+            </p>
+
+            <div class="mt-3 pt-3 border-t border-slate-100">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs font-bold text-indigo-700">${r.jenisStrategi}</span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Kode: ${r.kodePromo}
+                </span>
+              </div>
+              <textarea id="narasi-promo-${idx}" rows="3" class="w-full p-2.5 rounded-xl border border-slate-300 text-xs text-slate-700">${r.narasiPromo}</textarea>
+            </div>
+          </div>
+
+          <div class="flex gap-2 pt-2">
+            <button onclick="setujuiStrategiAI(${idx})" class="flex-1 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow flex items-center justify-center gap-1.5">
+              <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Setujui & Aktifkan Promo
+            </button>
+            <button onclick="abaikanStrategiAI(${idx})" class="px-3.5 h-10 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-semibold">
+              Abaikan
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function setujuiStrategiAI(idx) {
+      const r = ownerData.rekomendasiAI[idx];
+      const narasi = document.getElementById('narasi-promo-' + idx).value;
+      showLoader('Mengaktifkan kode promo di kasir...');
+      callBackend('setujuiRekomendasiAI', {
+        pin: verifiedOwnerPin,
+        data: {
+          namaProduk: r.namaProduk,
+          jenisStrategi: r.jenisStrategi,
+          diskonPersen: r.diskonSaran,
+          kodePromo: r.kodePromo,
+          narasiPromo: narasi
+        }
+      })
+      .then(data => {
+        hideLoader();
+        ownerData = data;
+        renderOwnerDashboard();
+        toast(`Kode promo ${r.kodePromo} aktif di Kasir!`);
+      })
+      .catch(err => {
+        hideLoader();
+        toast('Error: ' + err.message);
+      });
+    }
+
+    function abaikanStrategiAI(idx) {
+      const r = ownerData.rekomendasiAI[idx];
+      showLoader('Memperbarui antrean...');
+      callBackend('abaikanRekomendasiAI', {
+        pin: verifiedOwnerPin,
+        data: { namaProduk: r.namaProduk }
+      })
+      .then(data => {
+        hideLoader();
+        ownerData = data;
+        renderOwnerDashboard();
+        toast('Saran diabaikan.');
+      })
+      .catch(err => {
+        hideLoader();
+        toast('Error: ' + err.message);
+      });
+    }
+
+    /* ==================== MANAJEMEN KATALOG & TUTUP BUKU OWNER ==================== */
+    function renderKatalogOwner() {
+      const tbody = document.getElementById('tbody-katalog-owner');
+      const list = ownerData.katalogProduk || [];
+
+      tbody.innerHTML = list.map((p, idx) => {
+        const badgeCls = p.stok <= 0
+          ? 'bg-rose-50 text-rose-700 border-rose-200'
+          : p.status === 'Slow-Moving'
+            ? 'bg-amber-50 text-amber-700 border-amber-200'
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-2.5">
+                ${p.fotoUrl
+                  ? `<img src="${p.fotoUrl}" class="w-9 h-9 rounded-lg object-cover border border-slate-200">`
+                  : `<div class="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center font-mono text-[9px] font-bold text-slate-500 px-1 text-center">${p.kode.slice(-4)}</div>`
+                }
+                <div>
+                  <div class="font-bold text-slate-800">${p.nama}</div>
+                  <div class="text-[10px] text-slate-400 font-mono">${p.kode} • Terjual bln ini: ${p.terjualIni}</div>
+                </div>
+              </div>
+            </td>
+            <td class="py-3 px-4">
+              <input type="number" id="kat-harga-${idx}" value="${p.harga}" class="w-24 h-8 px-2 rounded-lg border border-slate-300 font-bold text-xs">
+            </td>
+            <td class="py-3 px-4">
+              <input type="number" id="kat-stok-${idx}" value="${p.stok}" class="w-16 h-8 px-2 rounded-lg border border-slate-300 font-bold text-xs">
+            </td>
+            <td class="py-3 px-4">
+              <input type="number" id="kat-lalu-${idx}" value="${p.terjualLalu}" class="w-16 h-8 px-2 rounded-lg border border-slate-300 text-xs">
+            </td>
+            <td class="py-3 px-4">
+              <input type="text" id="kat-catatan-${idx}" value="${p.catatan}" class="w-40 h-8 px-2 rounded-lg border border-slate-300 text-xs">
+            </td>
+            <td class="py-3 px-4">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeCls}">${p.status}</span>
+            </td>
+            <td class="py-3 px-4 text-right whitespace-nowrap space-x-1">
+              <button onclick="simpanEditProdukOwner(${idx})" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px]">Simpan</button>
+              <button onclick="hapusProdukOwner('${p.kode}', '${p.nama}')" class="px-2 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px]">Hapus</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function simpanEditProdukOwner(idx) {
+      const p = ownerData.katalogProduk[idx];
+      showLoader(`Menyimpan perubahan ${p.nama}...`);
+      callBackend('updateProdukOwner', {
+        pin: verifiedOwnerPin,
+        data: {
+          action: 'update',
+          kode: p.kode,
+          nama: p.nama,
+          kategori: p.kategori,
+          harga: document.getElementById('kat-harga-' + idx).value,
+          stok: document.getElementById('kat-stok-' + idx).value,
+          terjualLalu: document.getElementById('kat-lalu-' + idx).value,
+          catatan: document.getElementById('kat-catatan-' + idx).value,
+          quickTap: p.quickTap
+        }
+      })
+      .then(data => {
+        hideLoader();
+        ownerData = data;
+        renderOwnerDashboard();
+        toast(`Produk ${p.nama} berhasil diperbarui!`);
+      })
+      .catch(err => {
+        hideLoader();
+        toast('Error: ' + err.message);
+      });
+    }
+
+    function hapusProdukOwner(kode, nama) {
+      if (!confirm(`Hapus produk "${nama}" (${kode}) dari katalog?`)) return;
+      showLoader('Menghapus produk...');
+      callBackend('updateProdukOwner', {
+        pin: verifiedOwnerPin,
+        data: { action: 'delete', kode: kode }
+      })
+      .then(data => {
+        hideLoader();
+        ownerData = data;
+        renderOwnerDashboard();
+        toast(`Produk ${nama} dihapus.`);
+      })
+      .catch(err => {
+        hideLoader();
+        toast('Error: ' + err.message);
+      });
+    }
+
+    function prosesTutupBukuOwner() {
+      if (!confirm('Salin seluruh angka terjual bulan ini menjadi acuan "Terjual Bulan Lalu" untuk periode bulan baru?')) return;
+      showLoader('Memproses tutup buku bulanan...');
+      callBackend('tutupBukuBulananOwner', { pin: verifiedOwnerPin })
+        .then(data => {
+          hideLoader();
+          ownerData = data;
+          renderOwnerDashboard();
+          toast('Tutup buku bulanan selesai! Acuan bulan lalu diperbarui.');
+        })
+        .catch(err => {
+          hideLoader();
+          toast('Error: ' + err.message);
+        });
+    }
+
+    function renderLogPOACOwner() {
+      const tbody = document.getElementById('tbody-log-poac');
+      const logs = ownerData.logEvaluasi || [];
+
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-slate-400">Belum ada strategi promo AI yang diaktifkan.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = logs.map(l => {
+        const isWaiting = l.hasilEvaluasi === 'Menunggu Penjualan Promo';
+        const isSuccess = l.hasilEvaluasi.indexOf('Naik') !== -1;
+
+        return `
+          <tr>
+            <td class="py-3 px-4 font-mono text-slate-500">${l.waktu}</td>
+            <td class="py-3 px-4 font-bold text-slate-800">${l.namaProduk}</td>
+            <td class="py-3 px-4">
+              <span class="font-mono font-bold text-indigo-700">${l.kodePromo}</span>
+              <span class="text-slate-500">(${l.diskonPersen}%)</span>
+            </td>
+            <td class="py-3 px-4 text-slate-700">${l.statusEksekusi}</td>
+            <td class="py-3 px-4">
+              ${isSuccess
+                ? `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">✔ ${l.hasilEvaluasi}</span>`
+                : isWaiting
+                  ? `<div class="flex items-center gap-2">
+                       <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">Menunggu</span>
+                       <button onclick="simulasiClosedLoop('${l.idSaran}')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold">
+                         Simulasikan Penjualan Naik
+                       </button>
+                     </div>`
+                  : `<span class="text-slate-400">${l.hasilEvaluasi}</span>`
+              }
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function simulasiClosedLoop(idSaran) {
+      showLoader('Mensimulasikan efek promo...');
+      callBackend('simulasiPromoBerhasil', { pin: verifiedOwnerPin, idSaran: idSaran })
+        .then(data => {
+          hideLoader();
+          ownerData = data;
+          renderOwnerDashboard();
+          toast('Closed-Loop Feedback: Penjualan produk tercatat kembali naik!');
+        })
+        .catch(err => {
+          hideLoader();
+          toast('Error: ' + err.message);
+        });
+    }
+
+    function simpanGuardrailsOwner(e) {
+      e.preventDefault();
+      const newPin = document.getElementById('inp-pin-baru').value.trim();
+      showLoader('Menyimpan pengaturan Guardrails...');
+      callBackend('updateGuardrailsPOAC', {
+        pin: verifiedOwnerPin,
+        params: {
+          maxDiskon: document.getElementById('rng-max-diskon').value,
+          ambangTurun: document.getElementById('rng-ambang-turun').value,
+          minStokSlow: document.getElementById('inp-min-stok-slow').value,
+          targetOmzet: document.getElementById('inp-target-omzet').value,
+          newPin: newPin,
+          geminiApiKey: document.getElementById('inp-gemini-key').value
+        }
+      })
+      .then(data => {
+        hideLoader();
+        verifiedOwnerPin = newPin;
+        ownerData = data;
+        renderOwnerDashboard();
+        toast('Pengaturan Guardrails berhasil disimpan!');
+      })
+      .catch(err => {
+        hideLoader();
+        toast('Error: ' + err.message);
+      });
+    }
+  </script>
+</body>
+</html>
